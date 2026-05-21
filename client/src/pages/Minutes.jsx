@@ -238,7 +238,7 @@ export default function MeetingMinutes() {
               textTransform: "uppercase",
               letterSpacing: "0.8px",
             }}>
-              📅 Meeting Details
+              Meeting Details
             </h2>
             <div style={{
               display: "grid",
@@ -322,22 +322,7 @@ export default function MeetingMinutes() {
             gap: "8px",
             marginBottom: "20px",
           }}>
-            <button
-              onClick={() => setViewMode("edit")}
-              style={{
-                padding: "8px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-                background: viewMode === "edit" ? "var(--gold)" : "transparent",
-                color: viewMode === "edit" ? "#000" : "var(--text)",
-                cursor: "pointer",
-                fontSize: "13px",
-                fontWeight: 600,
-                transition: "all 0.2s",
-              }}
-            >
-              ✏️ Edit
-            </button>
+           
             <button
               onClick={() => setViewMode("preview")}
               style={{
@@ -588,7 +573,7 @@ export default function MeetingMinutes() {
                   className="btn-secondary"
                   style={{ width: "100%" }}
                 >
-                  👁️ Full Preview
+                 Full Preview
                 </button>
                 <button
                   onClick={handleSave}
@@ -723,7 +708,7 @@ export default function MeetingMinutes() {
                 className="btn-secondary"
                 style={{ flex: 1 }}
               >
-                ✏️ Edit
+                Edit
               </button>
               <button
                 onClick={() => window.print()}
@@ -839,7 +824,7 @@ export default function MeetingMinutes() {
 
               {actions.some(a => a.trim()) && (
                 <>
-                  <h4 style={{ color: "var(--gold)" }}>✅ Action Items</h4>
+                  <h4 style={{ color: "var(--gold)" }}> Action Items</h4>
                   <ol style={{ paddingLeft: "20px" }}>
                     {actions.filter(a => a.trim()).map((a, i) => (
                       <li key={i} style={{ marginBottom: "6px" }}>{a}</li>
