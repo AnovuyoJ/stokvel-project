@@ -6,7 +6,7 @@ name: Build and deploy Node.js app to Azure Web App - stokvel-backed
 on:
   push:
     branches:
-      - testing
+      - for_video
   workflow_dispatch:
 
 jobs:
