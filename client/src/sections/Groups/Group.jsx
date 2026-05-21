@@ -536,10 +536,10 @@ export default function Group() {
         ]}
       >
         <Field label="Full Name" htmlFor="invite-name">
-          <input id="invite-name" type="text" value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="e.g. Zanele Dlamini" />
+          <input id="invite-name" type="text" value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="e.g. Busisiwe Mthelezi" />
         </Field>
         <Field label="Email Address" htmlFor="invite-contact">
-          <input id="invite-contact" type="email" value={inviteContact} onChange={(e) => setInviteContact(e.target.value)} placeholder="e.g. zanele@email.com" />
+          <input id="invite-contact" type="email" value={inviteContact} onChange={(e) => setInviteContact(e.target.value)} placeholder="e.g. busi@email.com" />
         </Field>
       </Modal>
 

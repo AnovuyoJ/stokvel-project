@@ -742,7 +742,7 @@ textarea { resize: vertical; }
 .status-badge.cancelled { background: rgba(224,92,92,0.1);   color: var(--red); }
 
 /* === PAYOUTS === */
-.payout-list { display: flex; flex-direction: column; gap: 10px; max-width: 700px; list-style: none; }
+.payout-list { display: flex; flex-direction: column; gap: 10px; width:100%; list-style: none; }
 
 .payout-row {
   background: var(--surface);

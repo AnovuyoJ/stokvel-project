@@ -29,16 +29,7 @@ export function Payouts({ members, group, onReorder }) {
           
         </div>
       </header>
-      <div className="payout-method-info card" style={{ marginBottom: 20 }}>
-        {group?.payoutMethod === "Fixed Order (Roster)" && (
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
-            🔒 <strong>Fixed Roster (FIFO)</strong> — Members are paid in the order they joined.
-          </p>
-        )}
-       
-       
-        
-      </div>
+      
       {members.length === 0 ? (
         <p className="empty-state">No members added yet.</p>
       ) : (

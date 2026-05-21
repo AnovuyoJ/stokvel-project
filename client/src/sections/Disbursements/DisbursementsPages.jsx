@@ -57,9 +57,9 @@ export function Disbursements({ disbursements, members, group, contributions, on
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
               <div className="payout-avatar">{nextMember.initials}</div>
-              <div>
+              <div style={{color: "var(--gold)"}}>
                 <strong>{nextMember.name}</strong>
-                <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>
+                <span style={{ display: "block", fontSize: 12, color: "var(--text)" }}>
                   {nextMember.role}
                 </span>
               </div>

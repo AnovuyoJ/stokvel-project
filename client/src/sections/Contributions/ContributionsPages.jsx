@@ -142,8 +142,8 @@ export function Contributions({ contributions, members, group, onPay, loading, o
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h3 className="card-title" style={{ margin: 0 }}>Payment History</h3>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToCSV(contributions, group?.name)}>💾 Export CSV</button>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToPDF(contributions, group?.name)}>📄 Export PDF</button>
+              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToCSV(contributions, group?.name)}> Export CSV</button>
+              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToPDF(contributions, group?.name)}> Export PDF</button>
             </div>
           </div>
           <div className="meetings-table-wrap">
@@ -188,7 +188,7 @@ export function TreasurerContributions({ contributions, members, group, onConfir
         <h2 id="t-contributions-heading">Contributions</h2>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span className="month-label">{formatMonth(month)}</span>
-          <button className="btn-secondary" onClick={onFlagMissing}>🚩 Flag Unpaid</button>
+          <button className="btn-secondary" onClick={onFlagMissing}> Flag Unpaid</button>
         </div>
       </header>
 
@@ -270,8 +270,8 @@ export function TreasurerContributions({ contributions, members, group, onConfir
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h3 className="card-title" style={{ margin: 0 }}>Payment History</h3>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToCSV(contributions, group?.name)}>💾 Export CSV</button>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToPDF(contributions, group?.name)}>📄 Export PDF</button>
+              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToCSV(contributions, group?.name)}>Export CSV</button>
+              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToPDF(contributions, group?.name)}>Export PDF</button>
             </div>
           </div>
           <div className="meetings-table-wrap">
@@ -337,8 +337,8 @@ export function MemberContributions({ contributions, members, group, onPay, load
 
       {me && !paidThisMonth && (
         <div className="card" style={{ marginBottom: 24, padding: "20px 24px" }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Make Your Contribution</h3>
-          <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 16px" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "var(--text)" }}>Make Your Contribution</h3>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px" }}>
             Your contribution of <strong>R{group.amount}</strong> is due for {formatMonth(month)}.
           </p>
           <button className="btn-primary" onClick={() => onPay(me)} disabled={loading} style={{ minWidth: 160 }}>
