@@ -2,7 +2,7 @@ name: Build and deploy Node.js app to Azure Web App - stokvel-frontend
 on:
   push:
     branches:
-      - testing
+      - final_product
   workflow_dispatch:
 
 jobs:
