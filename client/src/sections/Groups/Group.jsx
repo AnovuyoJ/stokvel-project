@@ -6,7 +6,6 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import GroupForm from "../../components/GroupForm";
-import ComplianceReport from "../../components/ComplianceReport";
 import { Toast, Modal, Field } from "../../components/UiComponents";
 import { GroupsList } from "./GroupsPage";
 import {
@@ -31,6 +30,7 @@ import { Payouts } from "../Payouts/PayoutsPages";
 import {
   Disbursements
 } from "../Disbursements/DisbursementsPages";
+import { Reports } from "../Reports/ReportsPages";
 import { getNavItems } from "../../utils/navigation";
 import {
   formatDate,
@@ -294,10 +294,11 @@ export default function Group() {
     } catch { showToast("Failed to save order"); }
   }
 
-  async function handlePay(member) {
+  async function handlePay(member, months) {
+    const monthsArray = Array.isArray(months) ? months : months ? [months] : undefined;
     setPayLoading(true);
     try {
-      const { data } = await axios.post(`${API}/api/payfast/contribute`, { groupId: selectedGroup._id, memberId: member._id }, { headers: authHeader() });
+      const { data } = await axios.post(`${API}/api/payfast/contribute`, { groupId: selectedGroup._id, memberId: member._id, months: monthsArray }, { headers: authHeader() });
       window.location.href = data.paymentUrl;
     } catch (err) {
       showToast("Payment error: " + (err.response?.data?.error || err.message));
@@ -493,7 +494,7 @@ export default function Group() {
               <Members members={members} onInvite={() => setInviteModal(true)} onRoleChange={handleRoleChange} currentUserEmail={currentUserEmail} />
             </div>
             <div hidden={activeSection !== "payouts"}>
-              <Payouts members={members} group={selectedGroup} onReorder={handleReorder} />
+              <Payouts members={members} group={selectedGroup} contributions={contributions} disbursements={disbursements} onReorder={handleReorder} />
             </div>
             <div hidden={activeSection !== "meetings"}>
               <Meetings meetings={meetings} onAddMeeting={() => setMeetingModal(true)} onCompleteMeeting={handleCompleteMeeting} />
@@ -502,8 +503,13 @@ export default function Group() {
               <Contributions contributions={contributions} members={members} group={selectedGroup || {}} onPay={handlePay} onFlagMissing={handleFlagMissing} loading={payLoading} onConfirm={handleConfirmPayment} onFlagMissed={handleFlagMissed} currentUserEmail={currentUserEmail} />
             </div>
             <div hidden={activeSection !== "disbursements"}>
-              <Disbursements disbursements={disbursements} members={members} group={selectedGroup || {}} contributions={contributions} onDisburse={handleDisburse} onDisburseNext={handleDisburseNext} onMarkPaid={handleMarkPaid} loading={payLoading} />
+              <Disbursements disbursements={disbursements} members={members} group={selectedGroup || {}} contributions={contributions} onDisburse={handleDisburse} onDisburseNext={myMemberRole === "Treasurer" ? handleDisburseNext : undefined} onMarkPaid={handleMarkPaid} loading={payLoading} />
             </div>
+            {(myMemberRole === "Admin" || myMemberRole === "Treasurer") && (
+              <div hidden={activeSection !== "reports"}>
+                <Reports group={selectedGroup || {}} contributions={contributions} members={members} />
+              </div>
+            )}
 
             {/* Treasurer-only */}
             <div hidden={activeSection !== "t-members"}>
@@ -523,7 +529,6 @@ export default function Group() {
             <div hidden={activeSection !== "m-meetings"}>
               <MemberMeetings meetings={meetings} />
             </div>
-            <div hidden={activeSection !== "compliance"}><ComplianceReport groupId={selectedGroup?._id} /> </div>
           </main>
         </div>
       </div>

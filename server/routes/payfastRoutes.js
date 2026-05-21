@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const router = express.Router();
 const { sendContributionReceiptEmail } = require("../services/emailService");
 const User = require("../models/users");
+const Rate = require("../models/rate");
 
 // PayFast configuration
 const PAYFAST_SANDBOX = process.env.PAYFAST_SANDBOX !== "false";
@@ -48,6 +49,24 @@ function getMember() {
 function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function calcMemberPayout(groupId, memberId) {
+  const contributions = await Contribution.find({ group: groupId, member: memberId, status: "paid" });
+  const rateData = await Rate.findOne().sort({ lastUpdated: -1 });
+  const annualRate = rateData?.primeRate || 11.75;
+
+  let total = 0;
+  for (const c of contributions) {
+    total += c.amount;
+    if (c.paidAt && c.month) {
+      const [year, month] = c.month.split("-").map(Number);
+      const monthStart = new Date(year, month - 1, 1);
+      const daysEarly = Math.max(0, (monthStart - new Date(c.paidAt)) / 86400000);
+      total += parseFloat((c.amount * (annualRate / 100) * (daysEarly / 365)).toFixed(2));
+    }
+  }
+  return parseFloat(total.toFixed(2));
 }
 
 function generateSignature(data, passphrase = "") {
@@ -125,7 +144,7 @@ const Disbursement =
 // POST /api/payfast/contribute - Start a contribution payment
 router.post("/contribute", protect, async (req, res) => {
   try {
-    const { groupId, memberId } = req.body;
+    const { groupId, memberId, month: requestedMonth, months: requestedMonths } = req.body;
 
     if (!groupId || !memberId) {
       return res.status(400).json({ error: "groupId and memberId required" });
@@ -171,50 +190,65 @@ router.post("/contribute", protect, async (req, res) => {
       return res.status(404).json({ error: "Member not found" });
     }
 
-    const month = currentMonth();
+    // Build months array (supports single month or lump-sum array)
+    const cur = currentMonth();
+    let months;
+    if (Array.isArray(requestedMonths) && requestedMonths.length > 0) {
+      months = requestedMonths.filter((m) => /^\d{4}-\d{2}$/.test(m) && m >= cur).sort();
+    } else if (requestedMonth && /^\d{4}-\d{2}$/.test(requestedMonth) && requestedMonth >= cur) {
+      months = [requestedMonth];
+    } else {
+      months = [cur];
+    }
+    if (months.length === 0) months = [cur];
 
-    const existing = await Contribution.findOne({
+    // Reject if any month in the range is already paid
+    const alreadyPaid = await Contribution.find({
       group: groupId,
       member: memberId,
-      month,
+      month: { $in: months },
       status: "paid",
     });
-
-    if (existing) {
+    if (alreadyPaid.length > 0) {
       return res.status(409).json({
-        error: `${member.name} already paid for this month`,
+        error: `Already paid for: ${alreadyPaid.map((c) => c.month).join(", ")}`,
       });
     }
 
-    const reference = `STK-${groupId
-      .toString()
-      .slice(-4)
-      .toUpperCase()}-${memberId
-      .toString()
-      .slice(-4)
-      .toUpperCase()}-${Date.now()}`;
-
-    const contribution = await Contribution.create({
+    // Remove any stale pending records for these months before creating fresh ones
+    await Contribution.deleteMany({
       group: groupId,
       member: memberId,
-      amount: group.amount,
-      month,
+      month: { $in: months },
       status: "pending",
-      reference,
     });
+
+    const reference = `STK-${groupId.toString().slice(-4).toUpperCase()}-${memberId.toString().slice(-4).toUpperCase()}-${Date.now()}`;
+    const totalAmount = Number(group.amount) * months.length;
+
+    await Contribution.insertMany(
+      months.map((m) => ({
+        group: groupId,
+        member: memberId,
+        amount: group.amount,
+        month: m,
+        status: "pending",
+        reference,
+      }))
+    );
 
     const paymentData = {
       merchant_id: MERCHANT_ID,
       merchant_key: MERCHANT_KEY,
-      return_url: `${FRONTEND_URL}/group?payment=success&ref=${reference}`,
-      cancel_url: `${FRONTEND_URL}/group?payment=cancelled&ref=${reference}`,
+      return_url: `${req.headers.origin || FRONTEND_URL}/group?payment=success&ref=${reference}`,
+      cancel_url: `${req.headers.origin || FRONTEND_URL}/group?payment=cancelled&ref=${reference}`,
       notify_url: `${BACKEND_URL}/api/payfast/itn`,
       name_first: member.name.split(" ")[0],
       name_last: member.name.split(" ").slice(1).join(" ") || "Member",
       email_address: PAYFAST_SANDBOX ? "sbtu01@payfast.io" : member.contact,
       m_payment_id: reference,
-      amount: Number(group.amount).toFixed(2),
-      item_name: "Stokvel Contribution",
+      amount: totalAmount.toFixed(2),
+      item_name: months.length > 1 ? `Stokvel Contribution (${months.length} months)` : "Stokvel Contribution",
     };
 
     paymentData.signature = generateSignature(paymentData, PASSPHRASE);
@@ -229,7 +263,6 @@ router.post("/contribute", protect, async (req, res) => {
     res.json({
       paymentUrl,
       reference,
-      contributionId: contribution._id,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -255,27 +288,28 @@ router.post("/itn", express.urlencoded({ extended: false }), async (req, res) =>
     }
 
     if (data.payment_status !== "COMPLETE") {
-      await Contribution.findOneAndUpdate(
+      await Contribution.updateMany(
         { reference: data.m_payment_id },
         { status: "failed" }
       );
       return res.status(200).send("OK");
     }
 
-    const contribution = await Contribution.findOneAndUpdate(
+    const updated = await Contribution.updateMany(
       { reference: data.m_payment_id },
       {
         status: "paid",
         pfPaymentId: data.pf_payment_id,
         paidAt: new Date(),
-      },
-      { returnDocument: "after" }
+      }
     );
 
-    if (!contribution) {
+    if (updated.matchedCount === 0) {
       console.error("PayFast ITN: contribution not found for ref", data.m_payment_id);
       return res.status(404).send("Contribution not found");
     }
+
+    const contribution = await Contribution.findOne({ reference: data.m_payment_id });
 
     try {
       const Member = getMember();
@@ -455,19 +489,10 @@ router.post("/disburse", protect, async (req, res) => {
       });
     }
 
-    const contributions = await Contribution.find({
-      group: groupId,
-      month,
-      status: "paid",
-    });
-
-    const totalCollected = contributions.reduce(
-      (sum, contribution) => sum + contribution.amount,
-      0
-    );
-
-    const memberCount = await Member.countDocuments({ group: groupId });
-    const payoutAmount = totalCollected || group.amount * memberCount;
+    const payoutAmount = await calcMemberPayout(groupId, memberId);
+    if (payoutAmount <= 0) {
+      return res.status(400).json({ error: `${member.name} has no contributions to pay out` });
+    }
 
     const reference = `PAYOUT-${groupId.toString().slice(-4).toUpperCase()}-${Date.now()}`;
 
@@ -565,15 +590,10 @@ router.post("/disburse-next", protect, async (req, res) => {
       });
     }
 
-    // 3. Calculate total collected funds for the month
-    const totalCollectedResult = await Contribution.aggregate([
-      { $match: { group: group._id, month: currentMonthStr, status: "paid" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
-    const payoutAmount = totalCollectedResult[0]?.total || 0;
-
+    // 3. Calculate this member's personal payout (all their contributions + interest)
+    const payoutAmount = await calcMemberPayout(groupId, nextMember._id);
     if (payoutAmount <= 0) {
-      return res.status(400).json({ error: "No funds collected this month to disburse." });
+      return res.status(400).json({ error: `${nextMember.name} has no contributions to pay out.` });
     }
 
     // 4. Record a PENDING disbursement

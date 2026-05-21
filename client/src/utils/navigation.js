@@ -7,6 +7,7 @@ export const ADMIN_NAV = [
   { id: "meetings",      icon: "◷", label: "Meetings" },
   { id: "contributions", icon: "₴", label: "Contributions" },
   { id: "disbursements", icon: "◈", label: "Disbursements" },
+  { id: "reports",       icon: "◧", label: "Reports" },
 ];
 
 export const TREASURER_NAV = [
@@ -16,6 +17,7 @@ export const TREASURER_NAV = [
   { id: "t-contributions", icon: "₴", label: "Contributions" },
   { id: "t-meetings",      icon: "◷", label: "Meetings" },
   { id: "disbursements",   icon: "◈", label: "Disbursements" },
+  { id: "reports",         icon: "◧", label: "Reports" },
 ];
 
 export const MEMBER_NAV = [

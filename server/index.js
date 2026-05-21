@@ -1,14 +1,7 @@
 // Entry point: connects to database and starts server
-require('dotenv').config( ); 
+require('dotenv').config( );
 const mongoose = require("mongoose");
 const app = require("./app");
-
-const groupRoutes = require("./routes/groupRoutes");
-const payfastRoutes = require("./routes/payfastRoutes");
-const rateRoutes = require("./routes/rateRoutes");
-
-app.use("/api", groupRoutes);
-app.use("/api", rateRoutes);
 
 
 // Connect to MongoDB

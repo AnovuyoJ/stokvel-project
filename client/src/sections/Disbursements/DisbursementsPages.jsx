@@ -1,24 +1,34 @@
 // src/sections/Disbursements/DisbursementsPages.jsx
-import { formatMonth, formatDateTime, currentMonth, getInitials } from "../../utils/helpers";
+import { formatMonth, formatDateTime, currentMonth, calcInterest } from "../../utils/helpers";
+import { useRates } from "../../utils/useRates";
+
+function getMemberPayout(memberId, contributions, primeRate) {
+  const memberContribs = contributions.filter(
+    (c) => (c.member?._id || c.member) === memberId && c.status === "paid"
+  );
+  const total = memberContribs.reduce((sum, c) => sum + c.amount, 0);
+  const interest = memberContribs.reduce(
+    (sum, c) => sum + calcInterest(c.paidAt, c.month, c.amount, primeRate), 0
+  );
+  return parseFloat((total + interest).toFixed(2));
+}
 
 export function Disbursements({ disbursements, members, group, contributions, onDisburseNext, onDisburse, onMarkPaid, loading }) {
   const month = currentMonth();
+  const rates = useRates();
 
-  const totalCollected = contributions
-    .filter((c) => c.month === month && c.status === "paid")
-    .reduce((sum, c) => sum + c.amount, 0);
-
-  const paidCount = contributions.filter((c) => c.month === month && c.status === "paid").length;
-
-  // Members who have already received a disbursement this month
-  const disbursedThisMonth = new Set(
+  // Members who have already been paid out (ever, not just this month)
+  const disbursedIds = new Set(
     disbursements
-      .filter((d) => d.month === month)
+      .filter((d) => d.status === "paid")
       .map((d) => d.member?._id || d.member)
   );
 
-  // Next eligible member in FIFO order who hasn't been disbursed yet
-  const nextMember = members.find((m) => !disbursedThisMonth.has(m._id));
+  // Next eligible member in FIFO order who hasn't been paid out yet
+  const nextMember = members.find((m) => !disbursedIds.has(m._id));
+  const nextMemberPayout = nextMember
+    ? getMemberPayout(nextMember._id, contributions, rates?.primeRate)
+    : 0;
 
   return (
     <section aria-labelledby="disbursements-heading">
@@ -29,16 +39,13 @@ export function Disbursements({ disbursements, members, group, contributions, on
         <span className="month-label">{formatMonth(month)}</span>
       </header>
 
-      {/* ── Pool summary ── */}
+      {/* ── Payout method ── */}
       <div className="card contribution-summary" style={{ marginBottom: 24 }}>
         <div className="contrib-summary-row">
           <div>
-            <div className="stat-label">Available Pool</div>
-            <div className="stat-value" style={{ fontSize: 22 }}>
-              R {totalCollected.toLocaleString()}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-              from {paidCount} member{paidCount !== 1 ? "s" : ""} this month
+            <div className="stat-label">Payout Model</div>
+            <div style={{ fontSize: 14, color: "var(--text)", marginTop: 4 }}>
+              Each member receives their own contributions + interest earned
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -52,40 +59,46 @@ export function Disbursements({ disbursements, members, group, contributions, on
 
       {/* ── FIFO next-up card ── */}
       <div className="card" style={{ marginBottom: 24, padding: "20px 24px" }}>
-        <h3 style={{ margin: "0 0 12px", fontSize: 15,color: "var(--text)" }}>Next in FIFO Queue</h3>
+        <h3 style={{ margin: "0 0 12px", fontSize: 15, color: "var(--text)" }}>Next in FIFO Queue</h3>
         {nextMember ? (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
               <div className="payout-avatar">{nextMember.initials}</div>
               <div>
                 <strong>{nextMember.name}</strong>
-                <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>
-                  {nextMember.role}
-                </span>
+                <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>{nextMember.role}</span>
               </div>
-              <span className="status-badge active" style={{ marginLeft: "auto" }}>Next Up</span>
+              <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Payout Amount</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "var(--gold-light, #ffb400)" }}>
+                  R{nextMemberPayout.toLocaleString()}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>contributions + interest</div>
+              </div>
             </div>
 
-            <button
-              className="btn-primary"
-              onClick={onDisburseNext}
-              disabled={loading || totalCollected === 0}
-              style={{ minWidth: 200 }}
-            >
-              {loading
-                ? "Processing…"
-                : `Disburse R${totalCollected.toLocaleString()} to ${nextMember.name.split(" ")[0]}`}
-            </button>
+            {onDisburseNext && (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={onDisburseNext}
+                  disabled={loading || nextMemberPayout === 0}
+                  style={{ minWidth: 200 }}
+                >
+                  {loading ? "Processing…" : `Disburse R${nextMemberPayout.toLocaleString()} to ${nextMember.name.split(" ")[0]}`}
+                </button>
 
-            {totalCollected === 0 && (
-              <p style={{ fontSize: 12, color: "#e05c5c", marginTop: 8 }}>
-                No funds collected this month yet.
-              </p>
+                {nextMemberPayout === 0 && (
+                  <p style={{ fontSize: 12, color: "#e05c5c", marginTop: 8 }}>
+                    This member has no contributions yet.
+                  </p>
+                )}
+              </>
             )}
           </>
         ) : (
           <p style={{ color: "var(--green)", fontSize: 16 }}>
-            ✓ All members have been paid this month!
+            ✓ All members have been paid out!
           </p>
         )}
       </div>
@@ -98,8 +111,9 @@ export function Disbursements({ disbursements, members, group, contributions, on
           <h3 className="card-title" style={{ marginBottom: 12 }}>Payout Roster</h3>
           <ul className="contributions-list" aria-label="Disbursement roster">
             {members.map((m, i) => {
-              const record    = disbursements.find((d) => (d.member?._id || d.member) === m._id && d.month === month);
-              const disbursed = !!record;
+              const disbursed = disbursedIds.has(m._id);
+              const isNext = !disbursed && m._id === nextMember?._id;
+              const memberPayout = getMemberPayout(m._id, contributions, rates?.primeRate);
 
               return (
                 <li key={m._id} className={`contribution-row${disbursed ? " paid" : ""}`}>
@@ -109,7 +123,16 @@ export function Disbursements({ disbursements, members, group, contributions, on
                     <strong>{m.name}</strong>
                     <span>{m.role}</span>
                   </div>
-
+                  <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: disbursed ? "var(--green)" : "var(--gold-light, #ffb400)" }}>
+                    R{memberPayout.toLocaleString()}
+                  </span>
+                  {disbursed ? (
+                    <span className="status-badge active">✓ Paid Out</span>
+                  ) : isNext ? (
+                    <span className="status-badge" style={{ background: "rgba(155,127,212,0.15)", color: "#9b7fd4", border: "1px solid rgba(155,127,212,0.3)" }}>Next Up</span>
+                  ) : (
+                    <span className="status-badge pending">Pending</span>
+                  )}
                 </li>
               );
             })}

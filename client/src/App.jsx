@@ -7,7 +7,6 @@ import ResetPassword from './pages/ResetPassword'
 
 import Minutes from './pages/Minutes'
 import AcceptInvite from './pages/AcceptInvite'
-import ComplianceReportPage from './components/ComplianceReport';
 
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'

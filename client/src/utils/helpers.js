@@ -29,6 +29,41 @@ export function formatDateTime(d) {
   });
 }
 
+export function futureMonths(count = 5) {
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i <= count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return months;
+}
+
+export function calcInterest(paidAt, forMonth, amount, annualRate) {
+  if (!paidAt || !forMonth || !amount || !annualRate) return 0;
+  const paidDate = new Date(paidAt);
+  const [year, month] = forMonth.split("-").map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const daysEarly = Math.max(0, (monthStart - paidDate) / 86400000);
+  return parseFloat((amount * (annualRate / 100) * (daysEarly / 365)).toFixed(2));
+}
+
+export function addMonths(yearMonth, n) {
+  const [year, month] = yearMonth.split("-").map(Number);
+  const d = new Date(year, month - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function monthsBetween(start, end) {
+  const result = [];
+  let cur = start;
+  while (cur <= end) {
+    result.push(cur);
+    cur = addMonths(cur, 1);
+  }
+  return result;
+}
+
 export function authHeader() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   // The token is directly on the user object from login response

@@ -16,6 +16,7 @@ const groupRoutes = require("./routes/groupRoutes");
 const payfastRoutes = require("./routes/payfastRoutes");
 const memberRoutes  = require("./routes/memberRoutes");
 const rateRoutes = require("./routes/rateRoutes");
+const { getContributionCompliance, exportCompliancePDF, exportComplianceCSV } = require("./controllers/reportController");
 
 //const notificationRoutes = require('./routes/notificationRoutes');
 
@@ -33,10 +34,9 @@ app.use(
     origin: function(origin, callback) {
       const allowedOrigins = [
         process.env.CLIENT_URL,
-        "http://localhost:5173",
         "https://stokvel-frontend-agdyfaameebwe4f7.brazilsouth-01.azurewebsites.net"
       ];
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin) || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -61,6 +61,15 @@ app.use("/api", groupRoutes);
 app.use("/api/payfast", payfastRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/rates", rateRoutes);
+
+// Report routes — mounted directly on app to avoid router-chain issues
+app.get("/api/reports-test", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+app.get("/api/reports/:groupId", (req, res) => {
+  const fmt = req.query.format;
+  if (fmt === "pdf") return exportCompliancePDF(req, res);
+  if (fmt === "csv") return exportComplianceCSV(req, res);
+  return getContributionCompliance(req, res);
+});
 
 //app.use('/api', notificationRoutes);
 
