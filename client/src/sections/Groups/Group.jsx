@@ -130,19 +130,18 @@ export default function Group() {
     if (!selectedGroup) return;
     setMembersLoading(true);
     const h = { headers: authHeader() };
-    Promise.all([
+    Promise.allSettled([
       axios.get(`${API}/api/members?groupId=${selectedGroup._id}`, h),
       axios.get(`${API}/api/meetings?groupId=${selectedGroup._id}`, h),
       axios.get(`${API}/api/payfast/contributions?groupId=${selectedGroup._id}`, h),
       axios.get(`${API}/api/payfast/disbursements?groupId=${selectedGroup._id}`, h),
     ])
       .then(([mRes, mtRes, cRes, dRes]) => {
-        setMembers(mRes.data);
-        setMeetings(mtRes.data);
-        setContributions(cRes.data);
-        setDisbursements(dRes.data);
+        if (mRes.status === "fulfilled")  setMembers(mRes.value.data);
+        if (mtRes.status === "fulfilled") setMeetings(mtRes.value.data);
+        if (cRes.status === "fulfilled")  setContributions(cRes.value.data);
+        if (dRes.status === "fulfilled")  setDisbursements(dRes.value.data);
       })
-      .catch(() => showToast("Failed to load group data"))
       .finally(() => setMembersLoading(false));
   }, [selectedGroup]);
 

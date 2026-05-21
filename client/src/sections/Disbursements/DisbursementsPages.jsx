@@ -17,6 +17,11 @@ export function Disbursements({ disbursements, members, group, contributions, on
   const month = currentMonth();
   const rates = useRates();
 
+  const totalCollected = contributions
+    .filter((c) => c.month === month && c.status === "paid")
+    .reduce((sum, c) => sum + c.amount, 0);
+  const paidCount = contributions.filter((c) => c.month === month && c.status === "paid").length;
+
   // Members who have already been paid out (ever, not just this month)
   const disbursedIds = new Set(
     disbursements
@@ -39,13 +44,16 @@ export function Disbursements({ disbursements, members, group, contributions, on
         <span className="month-label">{formatMonth(month)}</span>
       </header>
 
-      {/* ── Payout method ── */}
+      {/* ── Pool summary ── */}
       <div className="card contribution-summary" style={{ marginBottom: 24 }}>
         <div className="contrib-summary-row">
           <div>
-            <div className="stat-label">Payout Model</div>
-            <div style={{ fontSize: 14, color: "var(--text)", marginTop: 4 }}>
-              Each member receives their own contributions + interest earned
+            <div className="stat-label">Available Pool</div>
+            <div className="stat-value" style={{ fontSize: 22 }}>
+              R {totalCollected.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+              from {paidCount} member{paidCount !== 1 ? "s" : ""} this month
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -64,9 +72,9 @@ export function Disbursements({ disbursements, members, group, contributions, on
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
               <div className="payout-avatar">{nextMember.initials}</div>
-              <div>
+              <div style={{ color: "var(--gold)" }}>
                 <strong>{nextMember.name}</strong>
-                <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>{nextMember.role}</span>
+                <span style={{ display: "block", fontSize: 12, color: "var(--text)" }}>{nextMember.role}</span>
               </div>
               <div style={{ marginLeft: "auto", textAlign: "right" }}>
                 <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Payout Amount</div>

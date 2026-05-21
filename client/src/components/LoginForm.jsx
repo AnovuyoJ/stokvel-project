@@ -81,6 +81,7 @@ function LoginForm({
         </div>
 
         <button
+          type="button"
           onClick={handleGoogleLogin} disabled={loading}
           style={{
             display: "flex", alignItems: "center",

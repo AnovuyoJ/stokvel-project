@@ -4,18 +4,18 @@ const mongoose = require("mongoose");
 const app = require("./app");
 
 
-// Connect to MongoDB
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+});
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("Database connected successfully");
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-      console.log("Server running on port " + PORT);
-      require("./services/rateService");
-    });
+    require("./services/rateService");
   })
   .catch((err) => {
-    console.error("Database connection failed:", err);
-    process.exit(1);
+    console.error("Database connection failed:", err.message);
   });

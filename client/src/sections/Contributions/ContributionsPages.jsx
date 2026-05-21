@@ -1,81 +1,6 @@
 import React, { useState } from "react";
 import { formatMonth, formatDateTime, currentMonth, addMonths, monthsBetween, calcInterest } from "../../utils/helpers";
 import { useRates } from "../../utils/useRates";
-// ── Import PDF generation engines (used for member's personal export) ────────
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-
-const API = import.meta.env.VITE_API_URL;
-
-// ── Compliance report download (CSV or PDF) from backend ─────────────────────
-async function downloadReport(groupId, type) {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const token = user.token || user.accessToken || user.user?.token;
-  const res = await fetch(`${API}/api/reports/${groupId}?format=${type}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `Server error ${res.status}`);
-  }
-  const disposition = res.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="?([^"]+)"?/);
-  const filename = match ? match[1] : `compliance_report.${type}`;
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ── Member personal CSV export (own contributions only) ──────────────────────
-function exportToCSV(contributions, groupName = "Stokvel") {
-  const headers = ["Member Name", "Month", "Amount (ZAR)", "Reference", "Status", "Date Paid"];
-  const rows = contributions.map(c => [
-    `"${c.member?.name || "—"}"`,
-    `"${formatMonth(c.month)}"`,
-    `"R${c.amount}"`,
-    `"${c.reference || "—"}"`,
-    `"${c.status}"`,
-    `"${c.paidAt ? formatDateTime(c.paidAt) : "—"}"`,
-  ]);
-  const csvContent = "data:text/csv;charset=utf-8,"
-    + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-  const link = document.createElement("a");
-  link.setAttribute("href", encodeURI(csvContent));
-  link.setAttribute("download", `${(groupName || "Stokvel").replace(/\s+/g, "_")}_My_Contributions.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-// ── Member personal PDF export (own contributions only) ──────────────────────
-function exportToPDF(contributions, groupName = "Stokvel") {
-  const doc = new jsPDF();
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text(`${groupName || "Stokvel"} - My Contribution History`, 14, 22);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(`Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 30);
-  autoTable(doc, {
-    startY: 35,
-    head: [["Month", "Amount", "Reference", "Status", "Date"]],
-    body: contributions.map(c => [
-      formatMonth(c.month),
-      `R${c.amount}`,
-      c.reference || "—",
-      c.status.toUpperCase(),
-      c.paidAt ? formatDateTime(c.paidAt) : "—",
-    ]),
-    theme: "striped",
-    headStyles: { fillColor: [59, 186, 140] },
-    styles: { fontSize: 9 },
-  });
-  doc.save(`${(groupName || "Stokvel").replace(/\s+/g, "_")}_My_Contributions.pdf`);
-}
 
 // ── Admin/General Contributions ───────────────────────────────────────────────
 export function Contributions({ contributions, members, group, onPay, loading, onFlagMissing, onConfirm, onFlagMissed, currentUserEmail }) {
@@ -150,13 +75,7 @@ export function Contributions({ contributions, members, group, onPay, loading, o
       )}
       {contributions.length > 0 && (
         <div style={{ marginTop: 32 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 className="card-title" style={{ margin: 0 }}>Payment History</h3>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => downloadReport(group._id, "csv").catch((e) => alert(`CSV export failed: ${e.message}`))}>💾 Export CSV</button>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => downloadReport(group._id, "pdf").catch((e) => alert(`PDF export failed: ${e.message}`))}>📄 Export PDF</button>
-            </div>
-          </div>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>Payment History</h3>
           <div className="meetings-table-wrap">
             <table className="meetings-table">
               <caption className="sr-only">Contribution history</caption>
@@ -278,13 +197,7 @@ export function TreasurerContributions({ contributions, members, group, onConfir
 
       {contributions.length > 0 && (
         <div style={{ marginTop: 32 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 className="card-title" style={{ margin: 0 }}>Payment History</h3>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => downloadReport(group._id, "csv").catch((e) => alert(`CSV export failed: ${e.message}`))}>💾 Export CSV</button>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => downloadReport(group._id, "pdf").catch((e) => alert(`PDF export failed: ${e.message}`))}>📄 Export PDF</button>
-            </div>
-          </div>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>Payment History</h3>
           <div className="meetings-table-wrap">
             <table className="meetings-table">
               <caption className="sr-only">Contribution history</caption>
@@ -461,13 +374,7 @@ export function MemberContributions({ contributions, members, group, onPay, load
 
       {myContributions.length > 0 && (
         <div style={{ marginTop: 32 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 className="card-title" style={{ margin: 0 }}>Payment History</h3>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToCSV(myContributions, group?.name)}>💾 Export CSV</button>
-              <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => exportToPDF(myContributions, group?.name)}>📄 Export PDF</button>
-            </div>
-          </div>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>Payment History</h3>
           <div className="meetings-table-wrap">
             <table className="meetings-table">
               <caption className="sr-only">My contribution history</caption>

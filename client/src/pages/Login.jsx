@@ -30,6 +30,8 @@ function Login() {
       const result = await signInWithPopup(auth, googleProvider);
       await handleBackendAuth(result.user);
     } catch (err) {
+      console.error("Google sign-in error code:", err.code);
+      console.error("Google sign-in error message:", err.message);
       setError("Google sign-in failed. Please try again.");
     } finally {
       setLoading(false);

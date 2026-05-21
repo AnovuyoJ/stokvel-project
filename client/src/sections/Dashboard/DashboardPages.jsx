@@ -1,6 +1,6 @@
 // src/sections/Dashboard/DashboardPages.jsx
 import React from "react";
-import { formatDate, formatMonth, getInitials, currentMonth, calcInterest } from "../../utils/helpers";
+import { formatDate, formatMonth, getInitials, currentMonth } from "../../utils/helpers";
 import { useRates } from "../../utils/useRates";
 
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
@@ -239,61 +239,6 @@ export function TreasurerDashboard({ group, members, meetings, contributions, di
             Manage Disbursements →
           </button>
         </article>
-
-        {/* Payout cycle progress */}
-        {(() => {
-          const paidOutIds = new Set(
-            disbursements.filter((d) => d.status === "paid").map((d) => d.member?._id || d.member)
-          );
-          const cycleProgress = members.length > 0 ? Math.round((paidOutIds.size / members.length) * 100) : 0;
-          const nextUp = members.find((m) => !paidOutIds.has(m._id));
-          return (
-            <article className="card">
-              <header className="card-header">
-                <h3>Payout Cycle Progress</h3>
-                <span className="month-label">{paidOutIds.size}/{members.length} paid out</span>
-              </header>
-              <div className="contrib-progress-wrap" style={{ margin: "16px 0" }}>
-                <div className="contrib-progress-bar">
-                  <div className="contrib-progress-fill" style={{ width: `${cycleProgress}%` }}
-                    role="progressbar" aria-valuenow={cycleProgress} aria-valuemin={0} aria-valuemax={100} />
-                </div>
-                <span className="contrib-progress-label">{cycleProgress}% of members paid out this cycle</span>
-              </div>
-              {members.length === 0 ? (
-                <p style={{ color: "var(--text-dim)", fontSize: 13 }}>No members yet.</p>
-              ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: "12px 0 0", display: "flex", flexDirection: "column", gap: 8 }}>
-                  {members.slice(0, 5).map((m, i) => {
-                    const paid = paidOutIds.has(m._id);
-                    const isNext = !paid && m._id === nextUp?._id;
-                    return (
-                      <li key={m._id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 11, color: "var(--text-dim)", minWidth: 20 }}>#{i + 1}</span>
-                        <div className="payout-avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{m.initials}</div>
-                        <span style={{ fontSize: 13 }}>{m.name}</span>
-                        <span
-                          className={`status-badge ${paid ? "active" : "pending"}`}
-                          style={isNext ? { marginLeft: "auto", background: "rgba(155,127,212,0.15)", color: "#9b7fd4", border: "1px solid rgba(155,127,212,0.3)" } : { marginLeft: "auto" }}
-                        >
-                          {paid ? "✓ Paid" : isNext ? "Next Up" : "Pending"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                  {members.length > 5 && (
-                    <li style={{ fontSize: 12, color: "var(--text-dim)", paddingLeft: 30 }}>
-                      +{members.length - 5} more members
-                    </li>
-                  )}
-                </ul>
-              )}
-              <button className="btn-secondary" style={{ marginTop: 16, width: "100%" }} onClick={() => onNavigate("disbursements")}>
-                Manage Payouts →
-              </button>
-            </article>
-          );
-        })()}
       </div>
     </>
   );
@@ -308,13 +253,10 @@ export function MemberDashboard({ group, members, meetings, contributions, curre
   const myContributions = me ? contributions.filter((c) => (c.member?._id || c.member) === me._id) : [];
   const paidThisMonth   = myContributions.some((c) => c.month === month && c.status === "paid");
   const totalPaid       = myContributions.filter((c) => c.status === "paid").reduce((sum, c) => sum + c.amount, 0);
-  const totalInterest   = myContributions
-    .filter((c) => c.status === "paid")
-    .reduce((sum, c) => sum + calcInterest(c.paidAt, c.month, c.amount, rates?.primeRate), 0);
   const upcomingMeetings = meetings.filter((m) => m.status === "upcoming").sort((a, b) => new Date(a.date) - new Date(b.date));
   const nextMeeting     = upcomingMeetings[0];
   const myPosition      = me ? members.findIndex((m) => m._id === me._id) + 1 : null;
-  const myPayout        = totalPaid + totalInterest;
+  const pool            = group.amount && members.length ? `R ${(Number(group.amount) * members.length).toLocaleString()}` : "—";
 
   return (
     <>
@@ -337,10 +279,8 @@ export function MemberDashboard({ group, members, meetings, contributions, curre
           <strong className="stat-value">R {totalPaid.toLocaleString()}</strong>
         </li>
         <li className="stat-card">
-          <span className="stat-label">My Payout</span>
-          <strong className="stat-value" style={{ color: myPayout > 0 ? "var(--gold-light, #ffb400)" : undefined }}>
-            R {myPayout.toFixed(2)}
-          </strong>
+          <span className="stat-label">Payout Pool</span>
+          <strong className="stat-value">{pool}</strong>
         </li>
         <li className="stat-card">
           <span className="stat-label">My Payout Position</span>
@@ -376,12 +316,6 @@ export function MemberDashboard({ group, members, meetings, contributions, curre
               </div>
             )}
           </div>
-          {totalInterest > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border, #252d45)", marginTop: 12 }}>
-              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>Interest earned (advance payments)</span>
-              <strong style={{ color: "var(--gold-light, #ffb400)", fontSize: 14 }}>+R{totalInterest.toFixed(2)}</strong>
-            </div>
-          )}
           <button className="btn-primary" style={{ width: "100%", marginTop: 8 }} onClick={() => onNavigate("m-contributions")}>
             {paidThisMonth ? "View Contribution History" : "Make a Contribution →"}
           </button>

@@ -735,14 +735,17 @@ textarea { resize: vertical; }
 }
 
 .status-badge.active    { background: rgba(76,175,125,0.1);  color: var(--green); }
+.status-badge.paid      { background: rgba(76,175,125,0.1);  color: var(--green); }
 .status-badge.pending   { background: rgba(224,181,76,0.1);  color: var(--yellow); }
 .status-badge.inactive  { background: rgba(224,92,92,0.1);   color: var(--red); }
 .status-badge.upcoming  { background: rgba(92,155,224,0.1);  color: var(--blue); }
 .status-badge.completed { background: rgba(76,175,125,0.1);  color: var(--green); }
 .status-badge.cancelled { background: rgba(224,92,92,0.1);   color: var(--red); }
+.status-badge.flagged   { background: rgba(224,181,76,0.1);  color: var(--yellow); }
+.status-badge.missed    { background: rgba(224,92,92,0.1);   color: var(--red); }
 
 /* === PAYOUTS === */
-.payout-list { display: flex; flex-direction: column; gap: 10px; max-width: 700px; list-style: none; }
+.payout-list { display: flex; flex-direction: column; gap: 10px; width:100%; list-style: none; }
 
 .payout-row {
   background: var(--surface);
