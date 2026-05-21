@@ -51,4 +51,5 @@ jobs:
           app-name: 'stokvel-backed'
           slot-name: 'Production'
           package: .
+          clean: true
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_76A3371209F54B90835A23ED7E72A1A3 }}
