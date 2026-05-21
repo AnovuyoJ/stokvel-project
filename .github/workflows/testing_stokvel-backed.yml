@@ -27,7 +27,7 @@ jobs:
         run: |
           cd server
           rm -rf node_modules
-          npm install --production
+          npm install
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -38,6 +38,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+
+    environment: 
+        name: Production
+        url: https://stokvel-backed-ada7ceh9agd3dneh.brazilsouth-01.azurewebsites.net
 
     steps:
       - name: Download artifact from build job
