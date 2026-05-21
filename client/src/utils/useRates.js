@@ -10,8 +10,8 @@ export function useRates() {
   useEffect(() => {
     fetch(`${API}/api/rates`)
       .then((res) => res.json())
-      .then((data) => setRates(data ?? FALLBACK_RATES))
-      .catch(() => setRates(FALLBACK_RATES));
+      .then((data) => setRates(data))
+      .catch(() => setRates(null));
   }, []);
 
   return rates;
