@@ -236,6 +236,32 @@ router.post("/contribute", protect, async (req, res) => {
   }
 });
 
+router.get("/debug-member", protect, async (req, res) => {
+  const { groupId } = req.query;
+  const Member = getMember();
+  const Group = getGroup();
+
+  const currentUser = await User.findById(req.userId).select("email");
+  const group = await Group.findById(groupId).select("owner");
+  const allMembers = await Member.find({ group: groupId });
+
+  res.json({
+    reqUserId: req.userId,
+    userEmail: currentUser?.email,
+    groupOwner: group?.owner?.toString(),
+    isOwner: group?.owner?.toString() === req.userId,
+    members: allMembers.map(m => ({
+      id: m._id,
+      name: m.name,
+      contact: m.contact,
+      userId: m.userId,
+      status: m.status,
+      emailMatch: m.contact?.toLowerCase() === currentUser?.email?.toLowerCase(),
+      userIdMatch: m.userId?.toString() === req.userId,
+    }))
+  });
+});
+
 // POST /api/payfast/itn - PayFast ITN callback
 router.post("/itn", express.urlencoded({ extended: false }), async (req, res) => {
   try {
