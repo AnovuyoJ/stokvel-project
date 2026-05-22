@@ -8,7 +8,7 @@ export function useRates() {
   const [rates, setRates] = useState(null);
 
   useEffect(() => {
-    fetch(`${API}/rates`)
+    fetch(`${API}/api/rates`)
       .then((res) => res.json())
       .then((data) => setRates(data))
       .catch(() => setRates(null));
