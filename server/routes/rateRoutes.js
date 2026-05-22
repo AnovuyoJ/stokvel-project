@@ -3,7 +3,7 @@ const router = express.Router();
 
 const Rate = require("../models/rate");
 
-router.get("/rates", async (req, res) => {
+router.get("/", async (req, res) => {
     try {
         const rate = await Rate.findOne().sort({ lastUpdated: -1 });
         res.json(rate);
