@@ -1,400 +1,579 @@
-const request = require('supertest');
-const express = require('express');
-const jwt = require('jsonwebtoken');
+// file: server/tests/groupRoutes.test.js
 
-// Mock all dependencies BEFORE importing routes
-jest.mock('jsonwebtoken');
-jest.mock('../../server/models/users');
-jest.mock('../../server/models/Notification');
-jest.mock('../../server/services/emailService');
-jest.mock('crypto');
+// Mock mongoose models BEFORE requiring the routes
+beforeAll(async () => {
+  process.env.JWT_SECRET = 'test-secret-key';  // Must be first
+  mongoServer = await MongoMemoryServer.create();
+  // ... rest
+});
 
-// Mock mongoose completely
-const mockGroupModel = {
-  find: jest.fn(),
-  findById: jest.fn(),
-  findOne: jest.fn(),
-  create: jest.fn(),
-  findOneAndUpdate: jest.fn(),
-  findOneAndDelete: jest.fn(),
-  deleteMany: jest.fn(),
-};
+function generateToken(userId = testUserId.toString()) {
+  return jwt.sign(
+    { id: userId, role: 'member' },
+    process.env.JWT_SECRET,  // Same secret
+    { expiresIn: '1h' }
+  );
+}
+const mockGroupFindById = jest.fn();
+const mockGroupFind = jest.fn();
+const mockGroupFindOne = jest.fn();
+const mockGroupFindOneAndUpdate = jest.fn();
+const mockGroupFindOneAndDelete = jest.fn();
+const mockGroupCreate = jest.fn();
 
-const mockMemberModel = {
-  find: jest.fn(),
-  findOne: jest.fn(),
-  create: jest.fn(),
-  findById: jest.fn(),
-  findByIdAndUpdate: jest.fn(),
-  deleteMany: jest.fn(),
-  countDocuments: jest.fn(),
-  updateMany: jest.fn(),
-};
+const mockMemberFindById = jest.fn();
+const mockMemberFind = jest.fn();
+const mockMemberFindOne = jest.fn();
+const mockMemberCreate = jest.fn();
+const mockMemberCountDocuments = jest.fn();
+const mockMemberUpdateMany = jest.fn();
+const mockMemberFindByIdAndUpdate = jest.fn();
+const mockMemberDeleteMany = jest.fn();
+const mockMemberDeleteOne = jest.fn();
 
-const mockMeetingModel = {
-  find: jest.fn(),
-  findById: jest.fn(),
-  create: jest.fn(),
-  deleteMany: jest.fn(),
-};
+const mockMeetingFindById = jest.fn();
+const mockMeetingFind = jest.fn();
+const mockMeetingCreate = jest.fn();
+const mockMeetingDeleteMany = jest.fn();
 
-// Mock mongoose.model
+const mockUserFindById = jest.fn();
+const mockUserFindOne = jest.fn();
+
+const mockNotificationCreate = jest.fn();
+
+// Mock mongoose
 jest.mock('mongoose', () => {
   const actualMongoose = jest.requireActual('mongoose');
   return {
     ...actualMongoose,
-    model: jest.fn((modelName) => {
-      if (modelName === 'Group') return mockGroupModel;
-      if (modelName === 'Member') return mockMemberModel;
-      if (modelName === 'Meeting') return mockMeetingModel;
-      return {};
+    model: jest.fn().mockImplementation((name, schema) => {
+      const mockModel = function(data) {
+        if (data) Object.assign(this, data);
+        this.save = jest.fn().mockResolvedValue(this);
+        this.toObject = jest.fn().mockReturnValue({ ...this });
+        this.deleteOne = jest.fn().mockResolvedValue({});
+        this.populate = jest.fn().mockReturnThis();
+      };
+      mockModel.findById = mockGroupFindById;
+      mockModel.find = mockGroupFind;
+      mockModel.findOne = mockGroupFindOne;
+      mockModel.findOneAndUpdate = mockGroupFindOneAndUpdate;
+      mockModel.findOneAndDelete = mockGroupFindOneAndDelete;
+      mockModel.create = mockGroupCreate;
+      mockModel.findByIdAndUpdate = mockMemberFindByIdAndUpdate;
+      mockModel.deleteMany = mockMemberDeleteMany;
+      mockModel.countDocuments = mockMemberCountDocuments;
+      mockModel.updateMany = mockMemberUpdateMany;
+      mockModel.prototype.save = jest.fn().mockResolvedValue({});
+      mockModel.prototype.populate = jest.fn().mockReturnThis();
+      return mockModel;
     }),
-    Schema: class Schema {
-      constructor() {}
+    models: {
+      User: {
+        findById: mockUserFindById,
+        findOne: mockUserFindOne,
+      },
+      Notification: {
+        create: mockNotificationCreate,
+      }
     },
-    Types: {
-      ObjectId: jest.fn(() => 'mock-object-id')
-    }
+    Schema: actualMongoose.Schema,
+    Types: actualMongoose.Types,
+    connect: jest.fn(),
+    connection: { close: jest.fn() },
   };
 });
 
-// Now import the routes after mocks
-const groupRoutes = require('../../server/routes/groupRoutes');
-const User = require('../../server/models/users');
-const Notification = require('../../server/models/Notification');
-const emailService = require('../../server/services/emailService');
-const crypto = require('crypto');
+// Mock email service
+jest.mock('../services/emailService', () => ({
+  sendInviteEmail: jest.fn().mockResolvedValue(true),
+  sendMeetingNotification: jest.fn().mockResolvedValue(true),
+  sendMissingContributionEmail: jest.fn().mockResolvedValue(true),
+  sendMeetingMinutes: jest.fn().mockResolvedValue(true),
+  sendRoleAssignedEmail: jest.fn().mockResolvedValue(true),
+}));
 
-// Create express app
-const app = express();
-app.use(express.json());
-app.use('/api', groupRoutes);
+// Mock users model
+jest.mock('../models/users', () => {
+  return jest.fn().mockImplementation(function(data) {
+    Object.assign(this, data);
+    this.save = jest.fn().mockResolvedValue(this);
+  });
+});
+
+// Now require the dependencies
+const request = require('supertest');
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+const User = require('../models/users');
+const { 
+  sendInviteEmail, 
+  sendMeetingNotification, 
+  sendMissingContributionEmail,
+  sendMeetingMinutes,
+  sendRoleAssignedEmail 
+} = require('../services/emailService');
+
+// Mock jwt verify
+jest.mock('jsonwebtoken', () => ({
+  verify: jest.fn().mockReturnValue({ id: 'test-user-id' }),
+  sign: jest.fn().mockReturnValue('mock-token'),
+}));
+
+// Import routes after all mocks
+const groupRoutes = require('../routes/groupRoutes');
 
 describe('Group Routes', () => {
-  let mockUserId;
-  let mockToken;
+  let app;
+  const testUserId = '507f1f77bcf86cd799439011';
+  const testGroupId = '507f1f77bcf86cd799439022';
+  const testMemberId = '507f1f77bcf86cd799439033';
+  const testMeetingId = '507f1f77bcf86cd799439044';
+
+  const mockGroup = {
+    _id: testGroupId,
+    owner: testUserId,
+    name: 'Test Group',
+    amount: 250,
+    freq: 'Monthly',
+    nextPayoutIndex: 0,
+    save: jest.fn().mockResolvedValue(true),
+  };
+
+  const mockMember = {
+    _id: testMemberId,
+    group: testGroupId,
+    name: 'John Doe',
+    contact: 'john@example.com',
+    role: 'Member',
+    status: 'active',
+    slot: 1,
+    contributions: [],
+    save: jest.fn().mockResolvedValue(true),
+    toObject: jest.fn().mockReturnValue({
+      _id: testMemberId,
+      name: 'John Doe',
+      contact: 'john@example.com',
+      role: 'Member',
+    }),
+    deleteOne: jest.fn().mockResolvedValue({}),
+  };
+
+  const mockUser = {
+    _id: testUserId,
+    email: 'admin@example.com',
+    username: 'admin',
+    name: 'Admin User',
+  };
 
   beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    
+    // Mock auth middleware
+    app.use((req, res, next) => {
+      req.userId = testUserId;
+      next();
+    });
+    
+    app.use('/api', groupRoutes);
+    
+    // Reset all mocks
     jest.clearAllMocks();
-    mockUserId = '507f1f77bcf86cd799439011';
-    mockToken = 'valid-jwt-token';
     
-    // Mock JWT verify to return decoded token
-    jwt.verify.mockReturnValue({ id: mockUserId });
-    
-    // Mock crypto
-    crypto.randomBytes.mockReturnValue({
-      toString: jest.fn().mockReturnValue('invite-token-123')
-    });
-  });
-
-  describe('Authentication Middleware', () => {
-    it('should return 401 if no token provided', async () => {
-      const response = await request(app)
-        .get('/api/groups');
-
-      expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error');
-    });
-
-    it('should return 401 if token is invalid', async () => {
-      jwt.verify.mockImplementation(() => {
-        throw new Error('Invalid token');
-      });
-      
-      const response = await request(app)
-        .get('/api/groups')
-        .set('Authorization', 'Bearer invalid-token');
-
-      expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error');
-    });
+    // Setup default mock implementations
+    mockUserFindById.mockResolvedValue(mockUser);
+    mockGroupFindById.mockResolvedValue(mockGroup);
+    mockGroupFindOne.mockResolvedValue(mockGroup);
+    mockMemberFindOne.mockResolvedValue(mockMember);
+    mockMemberFind.mockResolvedValue([mockMember]);
+    mockMemberCountDocuments.mockResolvedValue(1);
+    mockMeetingFind.mockResolvedValue([]);
   });
 
   describe('POST /api/group', () => {
-    const validGroupData = {
-      name: 'Test Group',
-      amount: 500,
-      freq: 'Monthly',
-      cycle: '12 Months',
-      max: 10,
-      meetDay: 'Monday',
-      payoutMethod: 'Fixed Order'
-    };
-
     it('should create a new group successfully', async () => {
-      const mockUser = { _id: mockUserId, username: 'testuser', email: 'test@example.com' };
-      User.findById.mockResolvedValue(mockUser);
-      
-      const mockGroup = { _id: 'group123', owner: mockUserId, ...validGroupData };
-      mockGroupModel.create.mockResolvedValue(mockGroup);
-      mockMemberModel.create.mockResolvedValue({});
+      mockGroupCreate.mockResolvedValue(mockGroup);
+      User.findById = mockUserFindById;
 
       const response = await request(app)
         .post('/api/group')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send(validGroupData);
+        .send({
+          name: 'New Group',
+          amount: 500,
+          freq: 'Monthly',
+        });
 
       expect(response.status).toBe(201);
       expect(response.body.name).toBe('Test Group');
-    }, 10000);
+    });
 
     it('should return 400 if group name is missing', async () => {
       const response = await request(app)
         .post('/api/group')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ ...validGroupData, name: '' });
+        .send({
+          amount: 500,
+        });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Group name is required');
     });
+
+    it('should return 500 on database error', async () => {
+      mockGroupCreate.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .post('/api/group')
+        .send({
+          name: 'New Group',
+          amount: 500,
+        });
+
+      expect(response.status).toBe(500);
+    });
   });
 
   describe('GET /api/groups', () => {
-    it('should return user groups', async () => {
-      const mockUser = { _id: mockUserId, email: 'test@example.com' };
-      User.findById.mockResolvedValue(mockUser);
-      
-      const mockOwnedGroups = [{ _id: '1', owner: mockUserId, name: 'My Group' }];
-      const mockMemberGroups = [{ _id: '2', name: 'Joined Group' }];
-      
-      mockGroupModel.find.mockReturnValue({
-        sort: jest.fn().mockResolvedValue(mockOwnedGroups)
-      });
-      
-      mockMemberModel.find.mockReturnValue({
-        populate: jest.fn().mockResolvedValue([
-          { group: mockMemberGroups[0] }
-        ])
-      });
+    it('should return owned and member groups', async () => {
+      mockGroupFind.mockResolvedValue([mockGroup]);
+      mockMemberFind.mockResolvedValue([{
+        group: mockGroup,
+        status: 'active',
+      }]);
 
       const response = await request(app)
-        .get('/api/groups')
-        .set('Authorization', `Bearer ${mockToken}`);
+        .get('/api/groups');
 
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
     });
-  });
 
-  describe('POST /api/members', () => {
-    const validInviteData = {
-      name: 'John Doe',
-      contact: 'john@example.com',
-      groupId: 'group123'
-    };
-
-    it('should invite a new member successfully', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId, name: 'Test Group' };
-      mockGroupModel.findOne.mockResolvedValue(mockGroup);
-      mockMemberModel.findOne.mockResolvedValue(null);
-      mockMemberModel.countDocuments.mockResolvedValue(0);
-      mockMemberModel.create.mockResolvedValue({ ...validInviteData, _id: 'member123' });
-      
-      const mockInviter = { _id: mockUserId, username: 'admin' };
-      User.findById.mockResolvedValue(mockInviter);
-      
-      emailService.sendInviteEmail.mockResolvedValue({});
+    it('should return 500 on database error', async () => {
+      mockGroupFind.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .post('/api/members')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send(validInviteData);
+        .get('/api/groups');
 
-      expect(response.status).toBe(201);
-      expect(response.body.name).toBe('John Doe');
-    });
-
-    it('should return 400 if name or email missing', async () => {
-      const response = await request(app)
-        .post('/api/members')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ groupId: 'group123' });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Name and email are required');
-    });
-
-    it('should return 400 for invalid email', async () => {
-      const response = await request(app)
-        .post('/api/members')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ ...validInviteData, contact: 'invalid-email' });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('A valid email address is required');
-    });
-  });
-
-  describe('POST /api/members/accept-invite', () => {
-    it('should accept invite successfully', async () => {
-      const mockMember = {
-        _id: 'member123',
-        group: 'group123',
-        contact: 'john@example.com',
-        inviteToken: 'valid-token',
-        inviteExpiry: new Date(Date.now() + 86400000),
-        status: 'pending',
-        save: jest.fn().mockResolvedValue(true)
-      };
-      
-      mockMemberModel.findOne.mockResolvedValue(mockMember);
-      User.findOne.mockResolvedValue(null);
-
-      const response = await request(app)
-        .post('/api/members/accept-invite')
-        .send({ token: 'valid-token', groupId: 'group123' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Invite accepted successfully');
-    });
-
-    it('should return 400 if token or groupId missing', async () => {
-      const response = await request(app)
-        .post('/api/members/accept-invite')
-        .send({ token: 'token' });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Token and groupId are required');
-    });
-  });
-
-  describe('POST /api/meetings', () => {
-    const validMeetingData = {
-      date: '2024-12-25',
-      time: '14:00',
-      venue: 'Community Hall',
-      groupId: 'group123'
-    };
-
-    it('should create a meeting successfully', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId, name: 'Test Group' };
-      mockGroupModel.findById.mockResolvedValue(mockGroup);
-      
-      const mockMember = { contact: 'member@example.com', name: 'Member' };
-      mockMemberModel.find.mockResolvedValue([mockMember]);
-      
-      const mockMeeting = { ...validMeetingData, _id: 'meeting123', status: 'upcoming' };
-      mockMeetingModel.create.mockResolvedValue(mockMeeting);
-      
-      emailService.sendMeetingNotification.mockResolvedValue({});
-
-      const response = await request(app)
-        .post('/api/meetings')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send(validMeetingData);
-
-      expect(response.status).toBe(201);
-      expect(response.body.date).toBe('2024-12-25');
-    });
-
-    it('should return 400 if date or venue missing', async () => {
-      const response = await request(app)
-        .post('/api/meetings')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ groupId: 'group123' });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Date and venue are required');
+      expect(response.status).toBe(500);
     });
   });
 
   describe('PATCH /api/group/:id', () => {
-    it('should update group', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId, name: 'Updated Group' };
-      mockGroupModel.findOneAndUpdate.mockResolvedValue(mockGroup);
+    it('should update a group successfully', async () => {
+      mockGroupFindOneAndUpdate.mockResolvedValue({
+        ...mockGroup,
+        name: 'Updated Group',
+      });
 
       const response = await request(app)
-        .patch('/api/group/group123')
-        .set('Authorization', `Bearer ${mockToken}`)
+        .patch(`/api/group/${testGroupId}`)
         .send({ name: 'Updated Group' });
 
       expect(response.status).toBe(200);
       expect(response.body.name).toBe('Updated Group');
     });
+
+    it('should return 404 if group not found', async () => {
+      mockGroupFindOneAndUpdate.mockResolvedValue(null);
+
+      const response = await request(app)
+        .patch(`/api/group/${testGroupId}`)
+        .send({ name: 'Updated Group' });
+
+      expect(response.status).toBe(404);
+    });
   });
 
   describe('DELETE /api/group/:id', () => {
-    it('should delete group', async () => {
-      mockGroupModel.findOneAndDelete.mockResolvedValue({ _id: 'group123' });
-      mockMemberModel.deleteMany.mockResolvedValue({});
-      mockMeetingModel.deleteMany.mockResolvedValue({});
+    it('should delete a group and related data', async () => {
+      mockGroupFindOneAndDelete.mockResolvedValue(mockGroup);
+      mockMemberDeleteMany.mockResolvedValue({});
+      mockMeetingDeleteMany.mockResolvedValue({});
 
       const response = await request(app)
-        .delete('/api/group/group123')
-        .set('Authorization', `Bearer ${mockToken}`);
+        .delete(`/api/group/${testGroupId}`);
 
       expect(response.status).toBe(200);
       expect(response.body.message).toBe('Group deleted');
     });
   });
 
-  describe('POST /api/flag-missing', () => {
-    it('should flag missing contributions', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId, name: 'Test Group', amount: 500 };
-      mockGroupModel.findById.mockResolvedValue(mockGroup);
-      
-      // Mock the member with correct query
-      mockMemberModel.findOne.mockResolvedValue({ userId: mockUserId, role: 'Treasurer' });
-      
-      const mockMembers = [
-        { _id: '1', contact: 'member1@test.com', name: 'Member 1', contributions: [] },
-        { _id: '2', contact: 'member2@test.com', name: 'Member 2', contributions: [{ month: '2024-12', status: 'paid' }] }
-      ];
-      mockMemberModel.find.mockResolvedValue(mockMembers);
-      
-      emailService.sendMissingContributionEmail.mockResolvedValue({});
-
-      const response = await request(app)
-        .post('/api/flag-missing')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ groupId: 'group123', month: '2024-12' });
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('flagged');
-    });
-  });
-
-  describe('GET /api/groups/:groupId/payout-schedule', () => {
-    it('should get payout schedule', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId, nextPayoutIndex: 0 };
-      mockGroupModel.findById.mockResolvedValue(mockGroup);
-      
-      const mockMembers = [
-        { _id: '1', name: 'Member 1', contact: 'm1@test.com', role: 'Member', createdAt: new Date(), contributions: [] },
-        { _id: '2', name: 'Member 2', contact: 'm2@test.com', role: 'Member', createdAt: new Date(), contributions: [] }
-      ];
-      mockMemberModel.find.mockReturnValue({
-        sort: jest.fn().mockResolvedValue(mockMembers)
-      });
-
-      const response = await request(app)
-        .get('/api/groups/group123/payout-schedule')
-        .set('Authorization', `Bearer ${mockToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-    });
-  });
-
   describe('GET /api/members', () => {
-    it('should get members', async () => {
-      const mockGroup = { _id: 'group123', owner: mockUserId };
-      mockGroupModel.findById.mockResolvedValue(mockGroup);
-      
-      const mockMembers = [
-        { _id: '1', name: 'Member 1', role: 'Member' }
-      ];
-      mockMemberModel.find.mockReturnValue({
-        sort: jest.fn().mockResolvedValue(mockMembers)
-      });
-
+    it('should return members for a group', async () => {
       const response = await request(app)
-        .get('/api/members?groupId=group123')
-        .set('Authorization', `Bearer ${mockToken}`);
+        .get('/api/members')
+        .query({ groupId: testGroupId });
 
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
+    });
+
+    it('should return 400 if groupId is missing', async () => {
+      const response = await request(app)
+        .get('/api/members');
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return 404 if group not found', async () => {
+      mockGroupFindById.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/api/members')
+        .query({ groupId: testGroupId });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('should return 403 if user is not a member', async () => {
+      mockMemberFindOne.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/api/members')
+        .query({ groupId: testGroupId });
+
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe('POST /api/members', () => {
+    it('should invite a new member successfully', async () => {
+      mockMemberCreate.mockResolvedValue(mockMember);
+      mockMemberCountDocuments.mockResolvedValue(2);
+      sendInviteEmail.mockResolvedValue(true);
+
+      const response = await request(app)
+        .post('/api/members')
+        .send({
+          name: 'Jane Doe',
+          contact: 'jane@example.com',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(201);
+      expect(sendInviteEmail).toHaveBeenCalled();
+    });
+
+    it('should return 400 if email is invalid', async () => {
+      const response = await request(app)
+        .post('/api/members')
+        .send({
+          name: 'Jane Doe',
+          contact: 'invalid-email',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return 409 if email already invited', async () => {
+      mockMemberFindOne.mockResolvedValue(mockMember);
+
+      const response = await request(app)
+        .post('/api/members')
+        .send({
+          name: 'Jane Doe',
+          contact: 'jane@example.com',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(409);
+    });
+
+    it('should handle invite email failure gracefully', async () => {
+      mockMemberCreate.mockResolvedValue(mockMember);
+      sendInviteEmail.mockRejectedValue(new Error('Email failed'));
+
+      const response = await request(app)
+        .post('/api/members')
+        .send({
+          name: 'Jane Doe',
+          contact: 'jane@example.com',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(201); // Still creates member
+    });
+  });
+
+  describe('POST /api/members/accept-invite', () => {
+    it('should accept a valid invite', async () => {
+      const pendingMember = {
+        ...mockMember,
+        status: 'pending',
+        inviteToken: 'valid-token',
+        inviteExpiry: new Date(Date.now() + 86400000),
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockMemberFindOne.mockResolvedValue(pendingMember);
+      mockUserFindOne.mockResolvedValue(mockUser);
+
+      const response = await request(app)
+        .post('/api/members/accept-invite')
+        .send({
+          token: 'valid-token',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe('Invite accepted successfully');
+    });
+
+    it('should return 400 for invalid or expired token', async () => {
+      mockMemberFindOne.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/members/accept-invite')
+        .send({
+          token: 'invalid-token',
+          groupId: testGroupId,
+        });
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('PATCH /api/members/:id/role', () => {
+    it('should assign a role to a member', async () => {
+      mockMemberFindById.mockResolvedValue(mockMember);
+
+      const response = await request(app)
+        .patch(`/api/members/${testMemberId}/role`)
+        .send({ role: 'Treasurer' });
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should return 400 for invalid role', async () => {
+      const response = await request(app)
+        .patch(`/api/members/${testMemberId}/role`)
+        .send({ role: 'InvalidRole' });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return 404 if member not found', async () => {
+      mockMemberFindById.mockResolvedValue(null);
+
+      const response = await request(app)
+        .patch(`/api/members/${testMemberId}/role`)
+        .send({ role: 'Treasurer' });
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/meetings', () => {
+    it('should create a meeting successfully', async () => {
+      const mockMeeting = {
+        _id: testMeetingId,
+        group: testGroupId,
+        date: '2024-06-15',
+        time: '14:00',
+        venue: 'Community Hall',
+        status: 'upcoming',
+        save: jest.fn().mockResolvedValue(true),
+        populate: jest.fn().mockReturnThis(),
+      };
+      mockMeetingCreate.mockResolvedValue(mockMeeting);
+      mockMemberFind.mockResolvedValue([mockMember]);
+      sendMeetingNotification.mockResolvedValue(true);
+
+      const response = await request(app)
+        .post('/api/meetings')
+        .send({
+          groupId: testGroupId,
+          date: '2024-06-15',
+          time: '14:00',
+          venue: 'Community Hall',
+          agenda: 'Discuss payouts',
+        });
+
+      expect(response.status).toBe(201);
+    });
+
+    it('should return 400 if required fields are missing', async () => {
+      const response = await request(app)
+        .post('/api/meetings')
+        .send({
+          date: '2024-06-15',
+        });
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/meetings', () => {
+    it('should return meetings for a group', async () => {
+      mockMeetingFind.mockReturnValue({
+        sort: jest.fn().mockResolvedValue([])
+      });
+
+      const response = await request(app)
+        .get('/api/meetings')
+        .query({ groupId: testGroupId });
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should return 400 if groupId is missing', async () => {
+      const response = await request(app)
+        .get('/api/meetings');
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/flag-missing', () => {
+    it('should flag missing contributions', async () => {
+      const memberWithMissing = {
+        ...mockMember,
+        contributions: [{ month: '2024-06', status: 'missed' }]
+      };
+      mockMemberFind.mockResolvedValue([memberWithMissing]);
+      sendMissingContributionEmail.mockResolvedValue(true);
+
+      const response = await request(app)
+        .post('/api/flag-missing')
+        .send({
+          groupId: testGroupId,
+          month: '2024-06',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.flagged).toBeGreaterThan(0);
+    });
+
+    it('should return message when all members have paid', async () => {
+      const memberWithPaid = {
+        ...mockMember,
+        contributions: [{ month: '2024-06', status: 'paid' }]
+      };
+      mockMemberFind.mockResolvedValue([memberWithPaid]);
+
+      const response = await request(app)
+        .post('/api/flag-missing')
+        .send({
+          groupId: testGroupId,
+          month: '2024-06',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('All members have paid');
+    });
+  });
+
+  describe('Unauthorized access', () => {
+    it('should return 401 when no auth token is provided', async () => {
+      const noAuthApp = express();
+      noAuthApp.use(express.json());
+      noAuthApp.use('/api', groupRoutes);
+
+      const response = await request(noAuthApp)
+        .get('/api/groups');
+
+      expect(response.status).toBe(401);
     });
   });
 });

@@ -1,4 +1,5 @@
 jest.setTimeout(30000);
+process.env.JWT_SECRET = 'test-secret';
 jest.mock('../services/emailService', () => ({
   sendInviteEmail: jest.fn().mockResolvedValue(true),
   sendMeetingNotification: jest.fn().mockResolvedValue(true),

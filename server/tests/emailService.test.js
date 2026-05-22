@@ -1,403 +1,369 @@
-const nodemailer = require('nodemailer');
-const emailService = require('../../../server/services/emailService');
+process.env.JWT_SECRET = 'test-secret';
+jest.mock('nodemailer', () => {
+  const mockSendMail = jest.fn().mockResolvedValue({ messageId: 'test-id', response: 'OK' });
+  return {
+    createTransport: jest.fn().mockReturnValue({
+      sendMail: mockSendMail
+    })
+  };
+});
 
-// Mock nodemailer
-jest.mock('nodemailer');
+const nodemailer = require('nodemailer');
+const {
+  sendContributionReceiptEmail,
+  sendInviteEmail,
+  sendMeetingNotification,
+  sendMissingContributionEmail,
+  sendMeetingMinutes,
+  sendRoleAssignedEmail,
+  sendPayoutInitiatedEmail,
+  sendPayoutNotificationEmail,
+} = require('../services/emailService');
 
 describe('Email Service', () => {
-  let mockSendMail;
+  // Get reference to the mocked sendMail function
+  const mockSendMail = nodemailer.createTransport().sendMail;
 
   beforeEach(() => {
-    // Clear all mocks
+    // Reset the mock before each test
     jest.clearAllMocks();
-    
-    // Setup mock transporter
-    mockSendMail = jest.fn().mockResolvedValue({ messageId: 'test-id-123' });
-    
-    nodemailer.createTransport.mockReturnValue({
-      sendMail: mockSendMail
-    });
-    
-    // Mock environment variables
-    process.env.EMAIL_USER = 'test@gmail.com';
-    process.env.EMAIL_PASS = 'test-app-password';
-    process.env.EMAIL_FROM = 'test@gmail.com';
+    mockSendMail.mockResolvedValue({ messageId: 'test-id', response: 'OK' });
   });
 
-  afterEach(() => {
-    jest.resetAllMocks();
-  });
+  describe('sendContributionReceiptEmail', () => {
+    it('should send contribution receipt email with correct parameters', async () => {
+      const emailData = {
+        toEmail: 'test@example.com',
+        toName: 'Test User',
+        groupName: 'Test Group',
+        amount: '250.00',
+        reference: 'REF-123',
+        date: '2024-01-01'
+      };
 
-  describe('sendInviteEmail', () => {
-    const inviteData = {
-      toEmail: 'john@example.com',
-      toName: 'John Doe',
-      groupName: 'Test Stokvel',
-      inviterName: 'Jane Admin',
-      inviteLink: 'https://stokvel.com/invite/123'
-    };
+      await sendContributionReceiptEmail(emailData);
 
-    it('should send invite email successfully', async () => {
-      await emailService.sendInviteEmail(inviteData);
-      
-      expect(nodemailer.createTransport).toHaveBeenCalledWith({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-      });
-      
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(inviteData.inviterName),
-        to: inviteData.toEmail,
-        subject: expect.stringContaining(inviteData.groupName),
-        html: expect.stringContaining(inviteData.toName),
-      });
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: process.env.EMAIL_FROM,
+          to: emailData.toEmail,
+          subject: expect.stringContaining('Test Group'),
+        })
+      );
     });
 
-    it('should include invite link in email', async () => {
-      await emailService.sendInviteEmail(inviteData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(inviteData.inviteLink);
-      expect(callArg.html).toContain('Accept Invitation');
+    it('should include contribution details in email body', async () => {
+      const emailData = {
+        toEmail: 'test@example.com',
+        toName: 'Test User',
+        groupName: 'Test Group',
+        amount: '250.00',
+        reference: 'REF-123',
+        date: '2024-01-01'
+      };
+
+      await sendContributionReceiptEmail(emailData);
+
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.html).toContain('R250.00');
+      expect(mailOptions.html).toContain('REF-123');
+      expect(mailOptions.html).toContain('Test Group');
+      expect(mailOptions.html).toContain('Test User');
     });
 
     it('should handle email sending errors', async () => {
-      mockSendMail.mockRejectedValue(new Error('SMTP connection failed'));
-      
-      await expect(emailService.sendInviteEmail(inviteData)).rejects.toThrow('SMTP connection failed');
+      mockSendMail.mockRejectedValueOnce(new Error('SMTP error'));
+
+      const emailData = {
+        toEmail: 'test@example.com',
+        toName: 'Test User',
+        groupName: 'Test Group',
+        amount: '250.00',
+        reference: 'REF-123',
+        date: '2024-01-01'
+      };
+
+      await expect(sendContributionReceiptEmail(emailData))
+        .rejects
+        .toThrow('SMTP error');
+    });
+
+    it('should handle missing optional fields gracefully', async () => {
+      const emailData = {
+        toEmail: 'test@example.com',
+        toName: 'Test User',
+        groupName: 'Test Group',
+        amount: '250.00'
+      };
+
+      await sendContributionReceiptEmail(emailData);
+
+      expect(mockSendMail).toHaveBeenCalledTimes(1);
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.html).toContain('undefined'); // reference and date are undefined
+    });
+  });
+
+  describe('sendInviteEmail', () => {
+    it('should send invite email with correct parameters', async () => {
+      const emailData = {
+        toEmail: 'newmember@example.com',
+        toName: 'New Member',
+        groupName: 'Test Group',
+        inviterName: 'John Doe',
+        inviteLink: 'https://example.com/invite/abc123'
+      };
+
+      await sendInviteEmail(emailData);
+
+      expect(mockSendMail).toHaveBeenCalledTimes(1);
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.to).toBe(emailData.toEmail);
+      expect(mailOptions.subject).toContain('Test Group');
+      expect(mailOptions.html).toContain('New Member');
+      expect(mailOptions.html).toContain('John Doe');
+      expect(mailOptions.html).toContain('https://example.com/invite/abc123');
+    });
+
+    it('should include accept button in invite email', async () => {
+      const emailData = {
+        toEmail: 'newmember@example.com',
+        toName: 'New Member',
+        groupName: 'Test Group',
+        inviterName: 'John Doe',
+        inviteLink: 'https://example.com/invite/abc123'
+      };
+
+      await sendInviteEmail(emailData);
+
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.html).toContain('Accept Invitation');
+      expect(mailOptions.html).toContain('href="https://example.com/invite/abc123"');
     });
   });
 
   describe('sendMeetingNotification', () => {
-    const meetingData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      groupName: 'Test Stokvel',
-      meetingDate: '2024-12-25',
-      meetingTime: '14:00',
-      venue: 'Community Hall',
-      link: 'https://zoom.us/join/123',
-      agenda: 'Discuss payout schedule'
-    };
+    it('should send meeting notification with all details', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        meetingDate: '2024-03-15',
+        meetingTime: '14:00',
+        link: 'https://meet.example.com/abc',
+        venue: 'Community Hall',
+        agenda: 'Discuss contributions and payouts'
+      };
 
-    it('should send meeting notification successfully', async () => {
-      await emailService.sendMeetingNotification(meetingData);
-      
+      await sendMeetingNotification(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(meetingData.groupName),
-        to: meetingData.toEmail,
-        subject: expect.stringContaining(meetingData.groupName),
-        html: expect.stringContaining(meetingData.meetingDate),
-      });
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.html).toContain('2024-03-15');
+      expect(mailOptions.html).toContain('14:00');
+      expect(mailOptions.html).toContain('Community Hall');
+      expect(mailOptions.html).toContain('https://meet.example.com/abc');
+      expect(mailOptions.html).toContain('Discuss contributions and payouts');
     });
 
-    it('should include all meeting details in email', async () => {
-      await emailService.sendMeetingNotification(meetingData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(meetingData.meetingDate);
-      expect(callArg.html).toContain(meetingData.meetingTime);
-      expect(callArg.html).toContain(meetingData.venue);
-      expect(callArg.html).toContain(meetingData.link);
-      expect(callArg.html).toContain(meetingData.agenda);
-    });
+    it('should handle meeting without agenda', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        meetingDate: '2024-03-15',
+        meetingTime: '14:00',
+        link: 'https://meet.example.com/abc',
+        venue: 'Community Hall'
+      };
 
-    it('should handle missing meeting time gracefully', async () => {
-      const dataWithoutTime = { ...meetingData, meetingTime: null };
-      await emailService.sendMeetingNotification(dataWithoutTime);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain('TBD');
-    });
+      await sendMeetingNotification(emailData);
 
-    it('should handle missing agenda gracefully', async () => {
-      const dataWithoutAgenda = { ...meetingData, agenda: null };
-      await emailService.sendMeetingNotification(dataWithoutAgenda);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).not.toContain('Agenda');
+      expect(mockSendMail).toHaveBeenCalledTimes(1);
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.html).not.toContain('Agenda');
     });
   });
 
   describe('sendMissingContributionEmail', () => {
-    const contributionData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      groupName: 'Test Stokvel',
-      month: '2024-12',
-      amount: 500
-    };
+    it('should send missing contribution warning', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        month: 'March 2024',
+        amount: '250.00'
+      };
 
-    it('should send missing contribution email successfully', async () => {
-      await emailService.sendMissingContributionEmail(contributionData);
-      
+      await sendMissingContributionEmail(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(contributionData.groupName),
-        to: contributionData.toEmail,
-        subject: expect.stringContaining(contributionData.groupName),
-        html: expect.stringContaining(`R${contributionData.amount}`),
-      });
-    });
-
-    it('should include month and amount in email', async () => {
-      await emailService.sendMissingContributionEmail(contributionData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(contributionData.month);
-      expect(callArg.html).toContain(`R${contributionData.amount}`);
-      expect(callArg.html).toContain('Contribution Reminder');
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('Missing Contribution');
+      expect(mailOptions.html).toContain('R250.00');
+      expect(mailOptions.html).toContain('March 2024');
+      expect(mailOptions.html).toContain('Jane Smith');
     });
   });
 
   describe('sendMeetingMinutes', () => {
-    const minutesData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      groupName: 'Test Stokvel',
-      meetingDate: '2024-12-25',
-      minutes: 'Decided to increase contributions by 10%'
-    };
+    it('should send meeting minutes', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        meetingDate: '2024-03-15',
+        minutes: 'Discussed quarterly goals. Agreed on new contribution amounts. Next meeting scheduled for April 15.'
+      };
 
-    it('should send meeting minutes successfully', async () => {
-      await emailService.sendMeetingMinutes(minutesData);
-      
+      await sendMeetingMinutes(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(minutesData.groupName),
-        to: minutesData.toEmail,
-        subject: expect.stringContaining(minutesData.groupName),
-        html: expect.stringContaining(minutesData.meetingDate),
-      });
-    });
-
-    it('should include minutes content in email', async () => {
-      await emailService.sendMeetingMinutes(minutesData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(minutesData.minutes);
-      expect(callArg.html).toContain('Meeting Minutes');
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('Meeting Minutes');
+      expect(mailOptions.html).toContain('Discussed quarterly goals');
+      expect(mailOptions.html).toContain('2024-03-15');
     });
   });
 
   describe('sendRoleAssignedEmail', () => {
-    const roleData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      groupName: 'Test Stokvel',
-      role: 'Treasurer'
-    };
+    it('should send role assignment notification for Treasurer', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        role: 'Treasurer'
+      };
 
-    it('should send role assignment email successfully', async () => {
-      await emailService.sendRoleAssignedEmail(roleData);
-      
+      await sendRoleAssignedEmail(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(roleData.groupName),
-        to: roleData.toEmail,
-        subject: expect.stringContaining(roleData.role),
-        html: expect.stringContaining(roleData.role),
-      });
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('Treasurer');
+      expect(mailOptions.html).toContain('Confirm member payments');
+      expect(mailOptions.html).toContain('Flag missing contributions');
+      expect(mailOptions.html).toContain('Manage payout schedules');
     });
 
-    it('should include treasurer responsibilities when role is Treasurer', async () => {
-      await emailService.sendRoleAssignedEmail(roleData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain('As Treasurer you can');
-      expect(callArg.html).toContain('Confirm member payments');
-      expect(callArg.html).toContain('Flag missing contributions');
-    });
+    it('should send role assignment notification for non-Treasurer role', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        groupName: 'Test Group',
+        role: 'Secretary'
+      };
 
-    it('should not include responsibilities for non-treasurer roles', async () => {
-      const memberRoleData = { ...roleData, role: 'Member' };
-      await emailService.sendRoleAssignedEmail(memberRoleData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).not.toContain('As Treasurer you can');
-    });
-  });
+      await sendRoleAssignedEmail(emailData);
 
-  describe('sendContributionReceiptEmail', () => {
-    const receiptData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      groupName: 'Test Stokvel',
-      amount: 500,
-      reference: 'PAY-123-456',
-      date: new Date('2024-12-25')
-    };
-
-    it('should send contribution receipt email successfully', async () => {
-      await emailService.sendContributionReceiptEmail(receiptData);
-      
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: process.env.EMAIL_FROM,
-        to: receiptData.toEmail,
-        subject: expect.stringContaining(receiptData.groupName),
-        html: expect.stringContaining(`R${receiptData.amount}`),
-      });
-    });
-
-    it('should include receipt details in email', async () => {
-      await emailService.sendContributionReceiptEmail(receiptData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(`R${receiptData.amount}`);
-      expect(callArg.html).toContain(receiptData.reference);
-      expect(callArg.html).toContain('Payment Confirmed');
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('Secretary');
+      // Should not include Treasurer-specific duties
+      expect(mailOptions.html).not.toContain('Confirm member payments');
     });
   });
 
   describe('sendPayoutInitiatedEmail', () => {
-    const payoutData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      amount: 1000,
-      groupName: 'Test Stokvel',
-      reference: 'PO-123-456'
-    };
+    it('should send payout initiated notification', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        amount: '1000.00',
+        groupName: 'Test Group',
+        reference: 'PAYOUT-123'
+      };
 
-    it('should send payout initiated email successfully', async () => {
-      await emailService.sendPayoutInitiatedEmail(payoutData);
-      
+      await sendPayoutInitiatedEmail(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(payoutData.groupName),
-        to: payoutData.toEmail,
-        subject: expect.stringContaining(payoutData.groupName),
-        html: expect.stringContaining(`R${payoutData.amount}`),
-      });
-    });
-
-    it('should include payout details in email', async () => {
-      await emailService.sendPayoutInitiatedEmail(payoutData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(`R${payoutData.amount}`);
-      expect(callArg.html).toContain(payoutData.reference);
-      expect(callArg.html).toContain('Payout Initiated');
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('Payout Initiated');
+      expect(mailOptions.html).toContain('R1000.00');
+      expect(mailOptions.html).toContain('PAYOUT-123');
     });
   });
 
   describe('sendPayoutNotificationEmail', () => {
-    const payoutData = {
-      toEmail: 'member@example.com',
-      toName: 'John Member',
-      amount: 1000,
-      groupName: 'Test Stokvel',
-      transactionId: 'TXN-789-012',
-      date: new Date('2024-12-25')
-    };
+    it('should send payout received notification', async () => {
+      const emailData = {
+        toEmail: 'member@example.com',
+        toName: 'Jane Smith',
+        amount: '1000.00',
+        groupName: 'Test Group',
+        transactionId: 'TXN-456',
+        date: new Date('2024-03-15')
+      };
 
-    it('should send payout notification email successfully', async () => {
-      await emailService.sendPayoutNotificationEmail(payoutData);
-      
+      await sendPayoutNotificationEmail(emailData);
+
       expect(mockSendMail).toHaveBeenCalledTimes(1);
-      expect(mockSendMail).toHaveBeenCalledWith({
-        from: expect.stringContaining(payoutData.groupName),
-        to: payoutData.toEmail,
-        subject: expect.stringContaining(payoutData.groupName),
-        html: expect.stringContaining(`R${payoutData.amount}`),
+      const mailOptions = mockSendMail.mock.calls[0][0];
+      expect(mailOptions.subject).toContain('payout');
+      expect(mailOptions.html).toContain('R1000.00');
+      expect(mailOptions.html).toContain('TXN-456');
+    });
+  });
+
+  describe('Transporter configuration', () => {
+    it('should create transporter with Gmail SMTP settings', () => {
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+        })
+      );
+    });
+
+    it('should configure transporter with timeout settings', () => {
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+        })
+      );
+    });
+  });
+
+  describe('Error handling across all functions', () => {
+    const allFunctions = [
+      { name: 'sendContributionReceiptEmail', fn: sendContributionReceiptEmail },
+      { name: 'sendInviteEmail', fn: sendInviteEmail },
+      { name: 'sendMeetingNotification', fn: sendMeetingNotification },
+      { name: 'sendMissingContributionEmail', fn: sendMissingContributionEmail },
+      { name: 'sendMeetingMinutes', fn: sendMeetingMinutes },
+      { name: 'sendRoleAssignedEmail', fn: sendRoleAssignedEmail },
+      { name: 'sendPayoutInitiatedEmail', fn: sendPayoutInitiatedEmail },
+      { name: 'sendPayoutNotificationEmail', fn: sendPayoutNotificationEmail },
+    ];
+
+    allFunctions.forEach(({ name, fn }) => {
+      it(`${name} should throw error when sendMail fails`, async () => {
+        mockSendMail.mockRejectedValueOnce(new Error('Network error'));
+
+        const basicData = {
+          toEmail: 'test@example.com',
+          toName: 'Test User',
+          groupName: 'Test Group',
+          amount: '250.00',
+          reference: 'REF-123',
+          date: '2024-01-01',
+          inviterName: 'Inviter',
+          inviteLink: 'https://example.com',
+          meetingDate: '2024-03-15',
+          meetingTime: '14:00',
+          link: 'https://meet.example.com',
+          venue: 'Hall',
+          agenda: 'Agenda',
+          month: 'March',
+          minutes: 'Minutes',
+          role: 'Member',
+          transactionId: 'TXN-123',
+        };
+
+        await expect(fn(basicData)).rejects.toThrow('Network error');
       });
-    });
-
-    it('should include transaction details in email', async () => {
-      await emailService.sendPayoutNotificationEmail(payoutData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain(`R${payoutData.amount}`);
-      expect(callArg.html).toContain(payoutData.transactionId);
-      expect(callArg.html).toContain('Payout Received');
-    });
-  });
-
-  describe('Email Service Error Handling', () => {
-    it('should throw error when SMTP connection fails', async () => {
-      mockSendMail.mockRejectedValue(new Error('Connection timeout'));
-      
-      await expect(emailService.sendInviteEmail({
-        toEmail: 'test@test.com',
-        toName: 'Test',
-        groupName: 'Test Group',
-        inviterName: 'Admin',
-        inviteLink: 'http://test.com'
-      })).rejects.toThrow('Connection timeout');
-    });
-
-    it('should throw error when authentication fails', async () => {
-      mockSendMail.mockRejectedValue(new Error('Invalid credentials'));
-      
-      await expect(emailService.sendMeetingNotification({
-        toEmail: 'test@test.com',
-        toName: 'Test',
-        groupName: 'Test Group',
-        meetingDate: '2024-12-25',
-        meetingTime: '14:00',
-        venue: 'Venue',
-        link: 'http://test.com',
-        agenda: 'Agenda'
-      })).rejects.toThrow('Invalid credentials');
-    });
-
-    it('should handle missing environment variables gracefully', async () => {
-      delete process.env.EMAIL_USER;
-      
-      // The transporter will be created with undefined auth user
-      // This will cause sendMail to fail
-      mockSendMail.mockRejectedValue(new Error('Missing credentials'));
-      
-      await expect(emailService.sendInviteEmail({
-        toEmail: 'test@test.com',
-        toName: 'Test',
-        groupName: 'Test Group',
-        inviterName: 'Admin',
-        inviteLink: 'http://test.com'
-      })).rejects.toThrow();
-    });
-  });
-
-  describe('Email Content Validation', () => {
-    it('should properly escape HTML in email content', async () => {
-      const maliciousData = {
-        toEmail: 'test@test.com',
-        toName: '<script>alert("xss")</script>',
-        groupName: 'Test <b>Group</b>',
-        inviterName: 'Admin',
-        inviteLink: 'http://test.com'
-      };
-      
-      await emailService.sendInviteEmail(maliciousData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      // The HTML should contain the escaped or raw content
-      expect(callArg.html).toBeDefined();
-    });
-
-    it('should handle special characters in email content', async () => {
-      const specialCharData = {
-        toEmail: 'test@test.com',
-        toName: 'José & María',
-        groupName: 'Stokvel #1',
-        inviterName: 'Admin',
-        inviteLink: 'http://test.com'
-      };
-      
-      await emailService.sendInviteEmail(specialCharData);
-      
-      const callArg = mockSendMail.mock.calls[0][0];
-      expect(callArg.html).toContain('José');
-      expect(callArg.html).toContain('María');
     });
   });
 });

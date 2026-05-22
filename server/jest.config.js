@@ -8,7 +8,16 @@ module.exports = {
 
   collectCoverageFrom: [
     "**/*.js",
-    "!**/node_modules/**"
+    "!**/node_modules/**",
+    // Add these exclusions below
+    "!**/tests/**",
+    "!**/__tests__/**",
+    "!**/*.test.js",
+    "!**/*.spec.js",
+    "!**/coverage/**",
+    "!**/config/**",
+    "!**/migrations/**",
+    "!**/seeds/**",
   ],
 
   // Generate coverage reports

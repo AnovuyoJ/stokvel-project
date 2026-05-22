@@ -1,3 +1,4 @@
+process.env.JWT_SECRET = 'test-secret';
 const mongoose = require('mongoose');
 const Group = require('../../../server/models/group');
 

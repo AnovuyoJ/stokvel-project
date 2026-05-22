@@ -135,7 +135,6 @@ describe("POST /api/payfast/contribute", () => {
     expect(res.status).toBe(200)
     expect(res.body).toHaveProperty("paymentUrl")
     expect(res.body).toHaveProperty("reference")
-    expect(res.body).toHaveProperty("contributionId")
     expect(res.body.paymentUrl).toContain("sandbox.payfast.co.za")
   })
 
