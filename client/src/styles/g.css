@@ -515,6 +515,7 @@ html, body {
 .form-page {
    max-width: 100; 
    width: 100%;
+   padding: 0 40px
    
   }
 
@@ -538,9 +539,9 @@ html, body {
   width: 100%;
   max-width: 100%;
   overflow-y: auto; 
-  box-sizing: border-box;      
-  
-         
+  box-sizing: border-box;   
+  background: var(--surface);
+  border-radius: var(--radius-lg);
 }
 
 fieldset {
